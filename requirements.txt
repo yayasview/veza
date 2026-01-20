@@ -1,0 +1,14 @@
+# Notion API client
+notion-client==2.2.1
+
+# HTTP requests
+requests==2.31.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Data handling
+python-dateutil==2.8.2
+
+# Retry logic
+tenacity==8.2.3

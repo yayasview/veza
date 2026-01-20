@@ -1,0 +1,52 @@
+{
+  "description": "Example Notion database properties for Avoma meetings",
+  "required_properties": {
+    "Title": {
+      "type": "title",
+      "description": "Meeting subject or title"
+    },
+    "Date": {
+      "type": "date",
+      "description": "Meeting start and end date/time"
+    },
+    "Duration": {
+      "type": "number",
+      "description": "Meeting duration in minutes"
+    },
+    "Participants": {
+      "type": "multi_select",
+      "description": "List of meeting attendees"
+    },
+    "Recording URL": {
+      "type": "url",
+      "description": "Link to meeting recording"
+    },
+    "Avoma ID": {
+      "type": "rich_text",
+      "description": "Original Avoma meeting ID for reference"
+    },
+    "Status": {
+      "type": "select",
+      "description": "Meeting status (Completed, Cancelled, etc.)",
+      "options": ["Completed", "Cancelled", "No Show", "Scheduled"]
+    },
+    "Tags": {
+      "type": "multi_select",
+      "description": "Meeting tags or topics from Avoma"
+    },
+    "Host": {
+      "type": "select",
+      "description": "Meeting organizer or host"
+    },
+    "Created At": {
+      "type": "date",
+      "description": "When the meeting was created in Avoma"
+    }
+  },
+  "notes": [
+    "All property names are case-sensitive",
+    "Title property must exist in every Notion database",
+    "You can add these properties manually in Notion",
+    "Select and multi-select options will be created automatically when importing"
+  ]
+}
