@@ -198,13 +198,16 @@ class MeetingTransformer:
 
         # Add participants
         if participants:
+            # Notion multi-select doesn't allow commas in values, so sanitize them
+            sanitized_participants = [p.replace(",", " -")[:100] for p in participants[:20]]
             properties["Participants"] = {
-                "multi_select": [{"name": p[:100]} for p in participants[:20]]  # Limit to 20 participants
+                "multi_select": [{"name": p} for p in sanitized_participants]
             }
 
         # Add host
         if host:
-            properties["Host"] = {"select": {"name": host[:100]}}
+            # Sanitize host name too (for select fields)
+            properties["Host"] = {"select": {"name": host.replace(",", " -")[:100]}}
 
         # Add recording URL (using existing "Recording" field)
         if recording_url:
