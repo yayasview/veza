@@ -189,18 +189,22 @@ class AvomaClient:
                     break
 
                 all_meetings.extend(meetings)
-                logger.info(f"Fetched page {page}: {len(meetings)} meetings (total: {len(all_meetings)})")
 
-                # Check if there are more pages
-                total = response.get("total", 0)
+                # Get total count for progress reporting
+                total_count = response.get("count", response.get("total", 0))
+                progress_str = f"{len(all_meetings)}/{total_count}" if total_count else str(len(all_meetings))
+                logger.info(f"Fetched page {page}: {len(meetings)} meetings (total: {progress_str})")
+
+                # Check if there are more pages using the "next" field (most reliable)
+                has_next = response.get("next") is not None
                 has_more = response.get("has_more", False)
 
                 # Break if no more pages
-                if not has_more and total > 0:
-                    if len(all_meetings) >= total:
-                        break
-                elif len(meetings) < limit:
-                    # If we got fewer results than the limit, we're done
+                if not has_next and not has_more:
+                    break
+
+                # Also break if we've fetched all meetings based on count
+                if total_count > 0 and len(all_meetings) >= total_count:
                     break
 
                 page += 1
