@@ -150,7 +150,7 @@ class NotionClientWrapper:
             # Get meeting title for logging
             title = "Unknown"
             try:
-                title_prop = meeting_data.get("properties", {}).get("Title", {})
+                title_prop = meeting_data.get("properties", {}).get("Name", {})
                 if title_prop.get("title"):
                     title = title_prop["title"][0]["text"]["content"]
             except (KeyError, IndexError):

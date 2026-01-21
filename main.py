@@ -189,18 +189,15 @@ def verify_notion_schema(notion_client: NotionClientWrapper):
     logger.info("VERIFYING NOTION DATABASE SCHEMA")
     logger.info("=" * 70)
 
-    # Define required properties
+    # Define required properties (adapted to existing database schema)
     required_properties = {
-        "Title": "title",
+        "Name": "title",  # Using existing "Name" field
         "Date": "date",
         "Duration": "number",
         "Participants": "multi_select",
-        "Recording URL": "url",
+        "Recording": "url",  # Using existing "Recording" field
         "Avoma ID": "rich_text",
-        "Status": "select",
-        "Tags": "multi_select",
         "Host": "select",
-        "Created At": "date",
     }
 
     # Verify properties

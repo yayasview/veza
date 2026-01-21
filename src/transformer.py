@@ -176,9 +176,9 @@ class MeetingTransformer:
             or self._safe_get(meeting, "recording_url")
         )
 
-        # Build Notion properties
+        # Build Notion properties (using existing database schema)
         properties = {
-            "Title": {"title": [{"text": {"content": title[:2000]}}]},  # Notion title limit
+            "Name": {"title": [{"text": {"content": title[:2000]}}]},  # Using existing "Name" field
             "Avoma ID": {"rich_text": [{"text": {"content": meeting_id}}]},
         }
 
@@ -188,10 +188,6 @@ class MeetingTransformer:
             if end_date:
                 date_prop["end"] = end_date
             properties["Date"] = {"date": date_prop}
-
-        # Add created date if available
-        if created_at:
-            properties["Created At"] = {"date": {"start": created_at}}
 
         # Add duration if available
         if duration:
@@ -207,19 +203,9 @@ class MeetingTransformer:
         if host:
             properties["Host"] = {"select": {"name": host[:100]}}
 
-        # Add status
-        if status:
-            properties["Status"] = {"select": {"name": status[:100]}}
-
-        # Add tags
-        if tags:
-            properties["Tags"] = {
-                "multi_select": [{"name": str(tag)[:100]} for tag in tags[:20]]  # Limit to 20 tags
-            }
-
-        # Add recording URL
+        # Add recording URL (using existing "Recording" field)
         if recording_url:
-            properties["Recording URL"] = {"url": recording_url[:2000]}
+            properties["Recording"] = {"url": recording_url[:2000]}
 
         # Build page content blocks
         children = []
@@ -392,7 +378,7 @@ class MeetingTransformer:
                 # Add a minimal entry to maintain consistency
                 transformed.append({
                     "properties": {
-                        "Title": {"title": [{"text": {"content": f"[ERROR] {title}"}}]},
+                        "Name": {"title": [{"text": {"content": f"[ERROR] {title}"}}]},
                         "Avoma ID": {
                             "rich_text": [
                                 {"text": {"content": str(meeting_data.get("meeting", {}).get("id", "unknown"))}}
