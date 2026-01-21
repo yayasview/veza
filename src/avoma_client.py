@@ -17,6 +17,11 @@ class AvomaAPIError(Exception):
     pass
 
 
+class AvomaAPIClientError(AvomaAPIError):
+    """Exception for 4xx client errors that shouldn't be retried."""
+    pass
+
+
 class AvomaClient:
     """Client for interacting with the Avoma API."""
 
@@ -41,9 +46,9 @@ class AvomaClient:
         })
 
     @retry(
-        stop=stop_after_attempt(4),
-        wait=wait_exponential(multiplier=1, min=2, max=16),
-        retry=retry_if_exception_type((requests.exceptions.RequestException, AvomaAPIError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        retry=retry_if_exception_type(requests.exceptions.RequestException),
     )
     def _make_request(
         self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None
@@ -75,14 +80,15 @@ class AvomaClient:
 
             # Handle different status codes
             if response.status_code == 401:
-                raise AvomaAPIError("Invalid API key or unauthorized access")
+                raise AvomaAPIClientError("Invalid API key or unauthorized access")
             elif response.status_code == 429:
                 logger.warning("Rate limit exceeded, retrying...")
                 raise AvomaAPIError("Rate limit exceeded")
             elif response.status_code >= 500:
                 raise AvomaAPIError(f"Server error: {response.status_code}")
             elif response.status_code >= 400:
-                raise AvomaAPIError(f"Client error: {response.status_code} - {response.text}")
+                # Client errors (4xx) shouldn't be retried
+                raise AvomaAPIClientError(f"Client error: {response.status_code} - {response.text}")
 
             response.raise_for_status()
             return response.json()
@@ -249,10 +255,12 @@ class AvomaClient:
 
             logger.debug(f"Fetching transcript {transcription_uuid}")
             return self._make_request("GET", f"/transcriptions/{transcription_uuid}")
-        except AvomaAPIError as e:
-            if "404" in str(e):
-                logger.debug(f"Transcript not found: {transcription_uuid}")
-                return None
+        except AvomaAPIClientError as e:
+            # 404 or other client errors mean the resource doesn't exist
+            logger.debug(f"Transcript not available: {e}")
+            return None
+        except AvomaAPIError:
+            # Server errors - let them propagate
             raise
 
     def get_meeting_notes(self, meeting_id: str) -> Optional[Dict[str, Any]]:
@@ -268,10 +276,12 @@ class AvomaClient:
         try:
             logger.debug(f"Fetching insights for meeting {meeting_id}")
             return self._make_request("GET", f"/meetings/{meeting_id}/insights")
-        except AvomaAPIError as e:
-            if "404" in str(e) or "405" in str(e):
-                logger.debug(f"No insights available for meeting {meeting_id}")
-                return None
+        except AvomaAPIClientError as e:
+            # Client errors mean the resource doesn't exist or isn't accessible
+            logger.debug(f"Insights not available: {e}")
+            return None
+        except AvomaAPIError:
+            # Server errors - let them propagate
             raise
 
     def get_meeting_recording(self, meeting: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -294,10 +304,12 @@ class AvomaClient:
 
             logger.debug(f"Fetching recording {recording_uuid}")
             return self._make_request("GET", f"/recordings/{recording_uuid}")
-        except AvomaAPIError as e:
-            if "404" in str(e):
-                logger.debug(f"Recording not found: {recording_uuid}")
-                return None
+        except AvomaAPIClientError as e:
+            # Client errors mean the resource doesn't exist
+            logger.debug(f"Recording not available: {e}")
+            return None
+        except AvomaAPIError:
+            # Server errors - let them propagate
             raise
 
     def get_complete_meeting_data(self, meeting_id: str) -> Dict[str, Any]:
