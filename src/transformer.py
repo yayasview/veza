@@ -216,110 +216,150 @@ class MeetingTransformer:
         # Build page content blocks
         children = []
 
-        # Add meeting notes section
-        notes_content = (
-            self._safe_get(notes, "content")
-            or self._safe_get(notes, "summary")
-            or self._safe_get(notes, "text")
-        )
+        # Add AI-generated notes section (from insights endpoint)
+        # Use direct .get() to avoid _safe_get bug with non-None defaults
+        ai_notes = notes.get("ai_notes", []) if notes else []
 
-        if notes_content:
-            children.append({
-                "object": "block",
-                "type": "heading_2",
-                "heading_2": {
-                    "rich_text": [{"text": {"content": "Meeting Notes"}}],
-                    "color": "default",
-                },
-            })
+        if isinstance(ai_notes, list) and ai_notes:
+            # Group notes by type
+            key_takeaways = []
+            action_items = []
 
-            # Split notes into blocks
-            note_chunks = self._split_into_blocks(notes_content)
-            for chunk in note_chunks:
+            for note in ai_notes:
+                if isinstance(note, dict):
+                    text = note.get("text", "")
+                    note_type = note.get("note_type", "")
+
+                    if note_type == "key_takeaways" and text:
+                        key_takeaways.append(text)
+                    elif note_type == "action_item" and text:
+                        action_items.append(text)
+
+            # Add Key Takeaways section
+            if key_takeaways:
                 children.append({
                     "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {"rich_text": [{"text": {"content": chunk}}]},
-                })
-
-        # Add action items if available
-        action_items = self._safe_get(notes, "action_items", [])
-        if action_items:
-            children.append({
-                "object": "block",
-                "type": "heading_3",
-                "heading_3": {"rich_text": [{"text": {"content": "Action Items"}}]},
-            })
-
-            for item in action_items[:50]:  # Limit to 50 action items
-                item_text = item if isinstance(item, str) else self._safe_get(item, "text", str(item))
-                children.append({
-                    "object": "block",
-                    "type": "to_do",
-                    "to_do": {
-                        "rich_text": [{"text": {"content": item_text[:2000]}}],
-                        "checked": False,
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "Key Takeaways"}}],
+                        "color": "default",
                     },
                 })
+
+                for takeaway in key_takeaways[:30]:  # Limit to 30
+                    children.append({
+                        "object": "block",
+                        "type": "bulleted_list_item",
+                        "bulleted_list_item": {
+                            "rich_text": [{"text": {"content": takeaway[:2000]}}]
+                        },
+                    })
+
+            # Add Action Items section
+            if action_items:
+                children.append({
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "Action Items"}}],
+                        "color": "default",
+                    },
+                })
+
+                for action in action_items[:30]:  # Limit to 30
+                    children.append({
+                        "object": "block",
+                        "type": "to_do",
+                        "to_do": {
+                            "rich_text": [{"text": {"content": action[:2000]}}],
+                            "checked": False,
+                        },
+                    })
+
+        # Add keywords if available
+        # Keywords structure: {"popular": [{"word": "...", "score": ..., "count": ...}], "occurrences": [...]}
+        keywords_data = notes.get("keywords") if notes else None
+        if keywords_data and isinstance(keywords_data, dict):
+            popular_keywords = keywords_data.get("popular", [])
+            if popular_keywords and isinstance(popular_keywords, list):
+                # Extract the "word" field from each keyword object
+                keywords_list = [kw.get("word", "") for kw in popular_keywords if isinstance(kw, dict) and kw.get("word")]
+                keywords_text = ", ".join(keywords_list[:20])
+
+                if keywords_text:
+                    children.append({
+                        "object": "block",
+                        "type": "callout",
+                        "callout": {
+                            "rich_text": [
+                                {"text": {"content": f"🔑 Key Topics: {keywords_text}"}}
+                            ],
+                            "color": "blue_background",
+                            "icon": {"emoji": "🔑"},
+                        },
+                    })
 
         # Add transcript section
-        transcript_text = (
-            self._safe_get(transcript, "text")
-            or self._safe_get(transcript, "content")
-            or self._safe_get(transcript, "transcript")
-        )
+        # Transcript is a list of dictionaries with speaker segments
+        transcript_segments = transcript.get("transcript", []) if transcript else []
 
-        if transcript_text:
-            children.append({
-                "object": "block",
-                "type": "heading_2",
-                "heading_2": {
-                    "rich_text": [{"text": {"content": "Transcript"}}],
-                    "color": "default",
-                },
-            })
+        if transcript_segments and isinstance(transcript_segments, list):
+            # Extract text from each segment and join them
+            transcript_text = " ".join(
+                segment.get("transcript", "") for segment in transcript_segments if isinstance(segment, dict)
+            )
 
-            # Check transcript size
-            if len(transcript_text) > self.MAX_TRANSCRIPT_SIZE:
-                # Add warning callout
+            if transcript_text.strip():
                 children.append({
                     "object": "block",
-                    "type": "callout",
-                    "callout": {
-                        "rich_text": [
-                            {
-                                "text": {
-                                    "content": f"⚠️ Transcript is very long ({len(transcript_text):,} characters). "
-                                    f"Only the first {self.MAX_TRANSCRIPT_SIZE:,} characters are included below. "
-                                    "Consider viewing the full transcript in Avoma or the recording."
-                                }
-                            }
-                        ],
-                        "color": "yellow_background",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "Transcript"}}],
+                        "color": "default",
                     },
                 })
-                # Truncate transcript
-                transcript_text = transcript_text[: self.MAX_TRANSCRIPT_SIZE]
 
-            # Split transcript into blocks
-            transcript_chunks = self._split_into_blocks(transcript_text)
+                # Check transcript size
+                if len(transcript_text) > self.MAX_TRANSCRIPT_SIZE:
+                    # Add warning callout
+                    children.append({
+                        "object": "block",
+                        "type": "callout",
+                        "callout": {
+                            "rich_text": [
+                                {
+                                    "text": {
+                                        "content": f"⚠️ Transcript is very long ({len(transcript_text):,} characters). "
+                                        f"Only the first {self.MAX_TRANSCRIPT_SIZE:,} characters are included below. "
+                                        "Consider viewing the full transcript in Avoma or the recording."
+                                    }
+                                }
+                            ],
+                            "color": "yellow_background",
+                        },
+                    })
+                    # Truncate transcript
+                    transcript_text = transcript_text[: self.MAX_TRANSCRIPT_SIZE]
 
-            # Add as toggle block to save space
-            children.append({
-                "object": "block",
-                "type": "toggle",
-                "toggle": {
-                    "rich_text": [{"text": {"content": "View Transcript"}}],
-                    "children": [
-                        {
-                            "object": "block",
-                            "type": "paragraph",
-                            "paragraph": {"rich_text": [{"text": {"content": chunk}}]},
-                        }
-                        for chunk in transcript_chunks[:100]  # Limit to 100 blocks
-                    ],
-                },
-            })
+                # Split transcript into blocks
+                transcript_chunks = self._split_into_blocks(transcript_text)
+
+                # Add as toggle block to save space
+                children.append({
+                    "object": "block",
+                    "type": "toggle",
+                    "toggle": {
+                        "rich_text": [{"text": {"content": "View Full Transcript"}}],
+                        "children": [
+                            {
+                                "object": "block",
+                                "type": "paragraph",
+                                "paragraph": {"rich_text": [{"text": {"content": chunk}}]},
+                            }
+                            for chunk in transcript_chunks[:100]  # Limit to 100 blocks
+                        ],
+                    },
+                })
 
         # Add metadata section
         children.append({

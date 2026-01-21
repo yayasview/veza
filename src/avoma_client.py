@@ -225,60 +225,74 @@ class AvomaClient:
         logger.debug(f"Fetching details for meeting {meeting_id}")
         return self._make_request("GET", f"/meetings/{meeting_id}")
 
-    def get_meeting_transcript(self, meeting_id: str) -> Optional[Dict[str, Any]]:
+    def get_meeting_transcript(self, meeting: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Get transcript for a specific meeting.
 
         Args:
-            meeting_id: Meeting ID
+            meeting: Meeting object (must contain uuid or id, and transcription_uuid if available)
 
         Returns:
             Transcript data or None if not available
         """
         try:
-            logger.debug(f"Fetching transcript for meeting {meeting_id}")
-            return self._make_request("GET", f"/meetings/{meeting_id}/transcript")
+            # Get transcription_uuid from the meeting object
+            transcription_uuid = meeting.get("transcription_uuid")
+
+            if not transcription_uuid:
+                logger.debug(f"No transcription_uuid for meeting {meeting.get('uuid') or meeting.get('id')}")
+                return None
+
+            logger.debug(f"Fetching transcript {transcription_uuid}")
+            return self._make_request("GET", f"/transcriptions/{transcription_uuid}")
         except AvomaAPIError as e:
             if "404" in str(e):
-                logger.debug(f"No transcript available for meeting {meeting_id}")
+                logger.debug(f"Transcript not found: {transcription_uuid}")
                 return None
             raise
 
     def get_meeting_notes(self, meeting_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get notes for a specific meeting.
+        Get notes/insights for a specific meeting.
 
         Args:
-            meeting_id: Meeting ID
+            meeting_id: Meeting UUID
 
         Returns:
-            Notes data or None if not available
+            Insights data (ai_notes, keywords, speakers) or None if not available
         """
         try:
-            logger.debug(f"Fetching notes for meeting {meeting_id}")
-            return self._make_request("GET", f"/meetings/{meeting_id}/notes")
+            logger.debug(f"Fetching insights for meeting {meeting_id}")
+            return self._make_request("GET", f"/meetings/{meeting_id}/insights")
         except AvomaAPIError as e:
-            if "404" in str(e):
-                logger.debug(f"No notes available for meeting {meeting_id}")
+            if "404" in str(e) or "405" in str(e):
+                logger.debug(f"No insights available for meeting {meeting_id}")
                 return None
             raise
 
-    def get_meeting_recording(self, meeting_id: str) -> Optional[Dict[str, Any]]:
+    def get_meeting_recording(self, meeting: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Get recording information for a specific meeting.
 
         Args:
-            meeting_id: Meeting ID
+            meeting: Meeting object (must contain recording_uuid if available)
 
         Returns:
-            Recording data or None if not available
+            Recording data (video_url, audio_url) or None if not available
         """
         try:
-            logger.debug(f"Fetching recording for meeting {meeting_id}")
-            return self._make_request("GET", f"/meetings/{meeting_id}/recording")
+            # Get recording_uuid from the meeting object
+            recording_uuid = meeting.get("recording_uuid")
+
+            if not recording_uuid:
+                logger.debug(f"No recording_uuid for meeting {meeting.get('uuid') or meeting.get('id')}")
+                return None
+
+            logger.debug(f"Fetching recording {recording_uuid}")
+            return self._make_request("GET", f"/recordings/{recording_uuid}")
         except AvomaAPIError as e:
             if "404" in str(e):
-                logger.debug(f"No recording available for meeting {meeting_id}")
+                logger.debug(f"Recording not found: {recording_uuid}")
                 return None
             raise
 
@@ -287,18 +301,21 @@ class AvomaClient:
         Get complete data for a meeting including details, transcript, notes, and recording.
 
         Args:
-            meeting_id: Meeting ID
+            meeting_id: Meeting UUID
 
         Returns:
             Complete meeting data
         """
         logger.debug(f"Fetching complete data for meeting {meeting_id}")
 
+        # First get the full meeting details (includes transcription_uuid, recording_uuid, etc.)
+        meeting = self.get_meeting_details(meeting_id)
+
         data = {
-            "meeting": self.get_meeting_details(meeting_id),
-            "transcript": self.get_meeting_transcript(meeting_id),
+            "meeting": meeting,
+            "transcript": self.get_meeting_transcript(meeting),
             "notes": self.get_meeting_notes(meeting_id),
-            "recording": self.get_meeting_recording(meeting_id),
+            "recording": self.get_meeting_recording(meeting),
         }
 
         return data
