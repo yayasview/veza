@@ -103,7 +103,16 @@ class AvomaClient:
         """
         try:
             logger.info("Testing Avoma API connection...")
-            self._make_request("GET", "/meetings", params={"limit": 1})
+            # Avoma API requires from_date and to_date parameters
+            from datetime import datetime, timedelta
+            to_date = datetime.now().strftime("%Y-%m-%d")
+            from_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+            self._make_request("GET", "/meetings", params={
+                "limit": 1,
+                "from_date": from_date,
+                "to_date": to_date
+            })
             logger.info("✓ Avoma API connection successful")
             return True
         except Exception as e:
