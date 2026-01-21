@@ -139,7 +139,7 @@ class MeetingTransformer:
             or "Untitled Meeting"
         )
 
-        meeting_id = str(self._safe_get(meeting, "id", "unknown"))
+        meeting_id = str(self._safe_get(meeting, "uuid") or self._safe_get(meeting, "id", "unknown"))
         start_date = self._format_date(
             self._safe_get(meeting, "start_at") or self._safe_get(meeting, "start_time")
         )
@@ -147,7 +147,9 @@ class MeetingTransformer:
             self._safe_get(meeting, "end_at") or self._safe_get(meeting, "end_time")
         )
         created_at = self._format_date(
-            self._safe_get(meeting, "created_at") or self._safe_get(meeting, "created_time")
+            self._safe_get(meeting, "created_at")
+            or self._safe_get(meeting, "created")
+            or self._safe_get(meeting, "created_time")
         )
 
         participants = self._extract_participants(meeting)
@@ -156,6 +158,7 @@ class MeetingTransformer:
         # Extract host information
         host = (
             self._safe_get(meeting, "host_name")
+            or self._safe_get(meeting, "organizer_email")
             or self._safe_get(meeting, "organizer", "name")
             or self._safe_get(meeting, "host", "name")
             or "Unknown"
@@ -381,7 +384,7 @@ class MeetingTransformer:
                         "Name": {"title": [{"text": {"content": f"[ERROR] {title}"}}]},
                         "Avoma ID": {
                             "rich_text": [
-                                {"text": {"content": str(meeting_data.get("meeting", {}).get("id", "unknown"))}}
+                                {"text": {"content": str(meeting_data.get("meeting", {}).get("uuid") or meeting_data.get("meeting", {}).get("id", "unknown"))}}
                             ]
                         },
                     },

@@ -159,17 +159,22 @@ class AvomaClient:
 
         Args:
             from_date: Start date (ISO format: YYYY-MM-DD)
-            to_date: End date (ISO format: YYYY-MM-DD)
+            to_date: End date (ISO format: YYYY-MM-DD), defaults to today
 
         Returns:
             List of all meetings
         """
+        # Default to_date to today if not provided
+        if not to_date:
+            from datetime import datetime
+            to_date = datetime.now().strftime("%Y-%m-%d")
+
         all_meetings = []
         page = 1
         limit = Config.BATCH_SIZE
 
         logger.info("Fetching all meetings from Avoma...")
-        logger.info(f"Date range: {from_date or 'beginning'} to {to_date or 'now'}")
+        logger.info(f"Date range: {from_date or 'beginning'} to {to_date}")
 
         while True:
             try:
@@ -316,10 +321,10 @@ class AvomaClient:
         logger.info(f"Fetching complete data for {total} meetings...")
 
         for i, meeting in enumerate(meetings, 1):
-            meeting_id = meeting.get("id")
+            meeting_id = meeting.get("uuid") or meeting.get("id")
 
             if not meeting_id:
-                logger.warning(f"Meeting {i} has no ID, skipping")
+                logger.warning(f"Meeting {i} has no ID/UUID, skipping")
                 continue
 
             try:

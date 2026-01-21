@@ -197,7 +197,8 @@ class NotionClientWrapper:
         logger.info(f"Total meetings: {total}")
         logger.info(f"Successful: {successful}")
         logger.info(f"Failed: {len(failed)}")
-        logger.info(f"Success rate: {(successful/total*100):.1f}%")
+        if total > 0:
+            logger.info(f"Success rate: {(successful/total*100):.1f}%")
 
         if dry_run:
             logger.info("\n[DRY RUN] No pages were actually created")
