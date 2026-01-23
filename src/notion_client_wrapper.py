@@ -285,7 +285,13 @@ class NotionClientWrapper:
                     query_params["start_cursor"] = start_cursor
 
                 time.sleep(self.rate_limit)
-                response = self.client.databases.query(**query_params)
+                # Use request method for database queries (notion-client 2.x)
+                body = {k: v for k, v in query_params.items() if k != "database_id"}
+                response = self.client.request(
+                    path=f"/databases/{self.database_id}/query",
+                    method="POST",
+                    body=body,
+                )
 
                 all_results.extend(response.get("results", []))
                 has_more = response.get("has_more", False)
