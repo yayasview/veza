@@ -249,3 +249,111 @@ class NotionClientWrapper:
         """
         schema = self.get_database_schema()
         return schema.get(property_name, {}).get("type")
+
+    def query_database(
+        self,
+        filter_dict: Optional[Dict[str, Any]] = None,
+        sorts: Optional[List[Dict[str, Any]]] = None,
+        page_size: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Query the Notion database with optional filters and sorting.
+
+        Args:
+            filter_dict: Notion filter object
+            sorts: List of sort criteria
+            page_size: Number of results per page
+
+        Returns:
+            List of matching pages
+        """
+        try:
+            query_params = {"database_id": self.database_id, "page_size": page_size}
+
+            if filter_dict:
+                query_params["filter"] = filter_dict
+
+            if sorts:
+                query_params["sorts"] = sorts
+
+            all_results = []
+            has_more = True
+            start_cursor = None
+
+            while has_more:
+                if start_cursor:
+                    query_params["start_cursor"] = start_cursor
+
+                time.sleep(self.rate_limit)
+                response = self.client.databases.query(**query_params)
+
+                all_results.extend(response.get("results", []))
+                has_more = response.get("has_more", False)
+                start_cursor = response.get("next_cursor")
+
+            logger.info(f"Query returned {len(all_results)} pages")
+            return all_results
+
+        except APIResponseError as e:
+            logger.error(f"Failed to query database: {e}")
+            raise NotionAPIError(f"Failed to query database: {e}")
+
+    def search_pages(self, search_text: str, sort_by_date: bool = True) -> List[Dict[str, Any]]:
+        """
+        Search for pages containing specific text in their title.
+
+        Args:
+            search_text: Text to search for in page titles
+            sort_by_date: If True, sort results by date (most recent first)
+
+        Returns:
+            List of matching pages
+        """
+        logger.info(f"Searching Notion for pages containing: {search_text}")
+
+        sorts = None
+        if sort_by_date:
+            sorts = [{"property": "Date", "direction": "descending"}]
+
+        filter_dict = {
+            "property": "Name",
+            "title": {
+                "contains": search_text,
+            },
+        }
+
+        return self.query_database(filter_dict=filter_dict, sorts=sorts)
+
+    def get_page_content(self, page_id: str) -> List[Dict[str, Any]]:
+        """
+        Get the content blocks of a specific page.
+
+        Args:
+            page_id: Notion page ID
+
+        Returns:
+            List of content blocks
+        """
+        try:
+            time.sleep(self.rate_limit)
+            response = self.client.blocks.children.list(block_id=page_id)
+            return response.get("results", [])
+        except APIResponseError as e:
+            logger.error(f"Failed to get page content: {e}")
+            raise NotionAPIError(f"Failed to get page content: {e}")
+
+    def get_all_pages(self, sort_by_date: bool = True) -> List[Dict[str, Any]]:
+        """
+        Get all pages from the database.
+
+        Args:
+            sort_by_date: If True, sort results by date (most recent first)
+
+        Returns:
+            List of all pages
+        """
+        sorts = None
+        if sort_by_date:
+            sorts = [{"property": "Date", "direction": "descending"}]
+
+        return self.query_database(sorts=sorts)

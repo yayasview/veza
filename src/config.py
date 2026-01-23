@@ -16,6 +16,10 @@ class Config:
     AVOMA_BASE_URL = "https://api.avoma.com/v1"
     AVOMA_RATE_LIMIT = float(os.getenv("AVOMA_RATE_LIMIT", "2"))
 
+    # HubSpot settings
+    HUBSPOT_API_KEY = os.getenv("HUBSPOT_API_KEY")
+    HUBSPOT_BASE_URL = "https://api.hubapi.com"
+
     # Notion settings
     NOTION_API_KEY = os.getenv("NOTION_API_KEY")
     NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
