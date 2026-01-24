@@ -14,13 +14,15 @@ class Config:
     # Avoma settings
     AVOMA_API_KEY = os.getenv("AVOMA_API_KEY")
     AVOMA_BASE_URL = "https://api.avoma.com/v1"
-    AVOMA_RATE_LIMIT = float(os.getenv("AVOMA_RATE_LIMIT", "2"))
+    # Default: 1 request per second (more conservative to avoid rate limits)
+    AVOMA_RATE_LIMIT = float(os.getenv("AVOMA_RATE_LIMIT", "1"))
 
     # Notion settings
     NOTION_API_KEY = os.getenv("NOTION_API_KEY")
     NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
     NOTION_API_VERSION = "2022-06-28"
-    NOTION_RATE_LIMIT = float(os.getenv("NOTION_RATE_LIMIT", "3"))
+    # Default: 2 requests per second (Notion allows ~3/sec, but being conservative)
+    NOTION_RATE_LIMIT = float(os.getenv("NOTION_RATE_LIMIT", "2"))
 
     # Export settings
     EXPORT_FROM_DATE = os.getenv("EXPORT_FROM_DATE", "2020-01-01")

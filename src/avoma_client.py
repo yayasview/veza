@@ -4,7 +4,7 @@ import time
 import requests
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed
 
 from .config import Config
 from .logger import setup_logger
@@ -15,6 +15,13 @@ logger = setup_logger()
 class AvomaAPIError(Exception):
     """Exception raised for Avoma API errors."""
     pass
+
+
+class AvomaRateLimitError(AvomaAPIError):
+    """Exception for rate limit errors that should be retried with backoff."""
+    def __init__(self, message: str, retry_after: Optional[float] = None):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class AvomaAPIClientError(AvomaAPIError):
@@ -35,6 +42,7 @@ class AvomaClient:
         self.api_key = api_key or Config.AVOMA_API_KEY
         self.base_url = Config.AVOMA_BASE_URL
         self.rate_limit = 1.0 / Config.AVOMA_RATE_LIMIT  # seconds between requests
+        self.last_request_time = 0.0  # Track last request time for rate limiting
 
         if not self.api_key:
             raise ValueError("Avoma API key is required")
@@ -45,10 +53,21 @@ class AvomaClient:
             "Content-Type": "application/json",
         })
 
+    def _wait_for_rate_limit(self):
+        """Wait if necessary to respect rate limits."""
+        current_time = time.time()
+        time_since_last_request = current_time - self.last_request_time
+        
+        if time_since_last_request < self.rate_limit:
+            sleep_time = self.rate_limit - time_since_last_request
+            time.sleep(sleep_time)
+        
+        self.last_request_time = time.time()
+
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=8),
-        retry=retry_if_exception_type(requests.exceptions.RequestException),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=2, min=2, max=60),
+        retry=retry_if_exception_type((requests.exceptions.RequestException, AvomaRateLimitError)),
     )
     def _make_request(
         self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None
@@ -70,20 +89,36 @@ class AvomaClient:
         """
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
 
+        # Rate limiting BEFORE the request to prevent hitting limits
+        self._wait_for_rate_limit()
+
         try:
             response = self.session.request(
                 method=method, url=url, params=params, json=data, timeout=30
             )
 
-            # Rate limiting
-            time.sleep(self.rate_limit)
-
             # Handle different status codes
             if response.status_code == 401:
                 raise AvomaAPIClientError("Invalid API key or unauthorized access")
             elif response.status_code == 429:
-                logger.warning("Rate limit exceeded, retrying...")
-                raise AvomaAPIError("Rate limit exceeded")
+                # Check for Retry-After header
+                retry_after = response.headers.get("Retry-After")
+                retry_seconds = None
+                
+                if retry_after:
+                    try:
+                        retry_seconds = float(retry_after)
+                    except ValueError:
+                        pass
+                
+                if retry_seconds:
+                    logger.warning(f"Rate limit exceeded. Waiting {retry_seconds} seconds (from Retry-After header)...")
+                    time.sleep(retry_seconds)
+                else:
+                    # Default to exponential backoff if no Retry-After header
+                    logger.warning("Rate limit exceeded, will retry with exponential backoff...")
+                
+                raise AvomaRateLimitError("Rate limit exceeded", retry_after=retry_seconds)
             elif response.status_code >= 500:
                 raise AvomaAPIError(f"Server error: {response.status_code}")
             elif response.status_code >= 400:
@@ -93,6 +128,9 @@ class AvomaClient:
             response.raise_for_status()
             return response.json()
 
+        except AvomaRateLimitError:
+            # Re-raise rate limit errors to trigger retry
+            raise
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {e}")
             raise AvomaAPIError(f"Request failed: {e}")

@@ -16,6 +16,13 @@ class NotionAPIError(Exception):
     pass
 
 
+class NotionRateLimitError(NotionAPIError):
+    """Exception for rate limit errors that should be retried with backoff."""
+    def __init__(self, message: str, retry_after: Optional[float] = None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 class NotionClientWrapper:
     """Wrapper for the Notion API client with additional functionality."""
 
@@ -30,6 +37,7 @@ class NotionClientWrapper:
         self.api_key = api_key or Config.NOTION_API_KEY
         self.database_id = database_id or Config.NOTION_DATABASE_ID
         self.rate_limit = 1.0 / Config.NOTION_RATE_LIMIT  # seconds between requests
+        self.last_request_time = 0.0  # Track last request time for rate limiting
 
         if not self.api_key:
             raise ValueError("Notion API key is required")
@@ -51,6 +59,8 @@ class NotionClientWrapper:
         """
         try:
             logger.info("Testing Notion API connection...")
+            # Rate limiting BEFORE the request
+            self._wait_for_rate_limit()
             database = self.client.databases.retrieve(database_id=self.database_id)
             logger.info(f"✓ Connected to database: {database.get('title', [{}])[0].get('plain_text', 'Unknown')}")
             return True
@@ -67,6 +77,8 @@ class NotionClientWrapper:
         """
         try:
             logger.info("Fetching database schema...")
+            # Rate limiting BEFORE the request
+            self._wait_for_rate_limit()
             database = self.client.databases.retrieve(database_id=self.database_id)
 
             # Handle new data_sources structure (API version 2025-09-03+)
@@ -77,6 +89,8 @@ class NotionClientWrapper:
                 data_sources = database.get("data_sources", [])
                 if data_sources:
                     data_source_id = data_sources[0]["data_source_id"]
+                    # Rate limiting before additional request
+                    self._wait_for_rate_limit()
                     data_source = self.client.request(
                         method="GET", path=f"data-sources/{data_source_id}"
                     )
@@ -89,8 +103,75 @@ class NotionClientWrapper:
             return properties
 
         except APIResponseError as e:
+            # Check if it's a rate limit error
+            if e.code == "rate_limited" or "rate limit" in str(e).lower():
+                # Handle rate limit and wait
+                retry_after = None
+                error_str = str(e).lower()
+                
+                if "retry after" in error_str or "retry-after" in error_str:
+                    import re
+                    match = re.search(r'retry[-\s]after[:\s]+(\d+)', error_str)
+                    if match:
+                        retry_after = float(match.group(1))
+                
+                if retry_after:
+                    logger.warning(f"Rate limit exceeded. Waiting {retry_after} seconds...")
+                    time.sleep(retry_after)
+                else:
+                    logger.warning("Rate limit exceeded. Waiting 3 seconds...")
+                    time.sleep(3)
+                
+                # Retry once after handling rate limit
+                self._wait_for_rate_limit()
+                database = self.client.databases.retrieve(database_id=self.database_id)
+                properties = database.get("properties", {})
+                return properties
             logger.error(f"Failed to retrieve database schema: {e}")
             raise NotionAPIError(f"Failed to retrieve database schema: {e}")
+
+    def _wait_for_rate_limit(self):
+        """Wait if necessary to respect rate limits."""
+        current_time = time.time()
+        time_since_last_request = current_time - self.last_request_time
+        
+        if time_since_last_request < self.rate_limit:
+            sleep_time = self.rate_limit - time_since_last_request
+            time.sleep(sleep_time)
+        
+        self.last_request_time = time.time()
+
+    def _handle_rate_limit_error(self, error: APIResponseError) -> None:
+        """
+        Handle rate limit errors from Notion API.
+        
+        Args:
+            error: The APIResponseError that occurred
+            
+        Raises:
+            NotionRateLimitError: To trigger retry logic
+        """
+        if error.code == "rate_limited" or "rate limit" in str(error).lower():
+            # Notion API typically provides retry_after in the error message
+            retry_after = None
+            error_str = str(error).lower()
+            
+            # Try to extract retry_after from error message
+            if "retry after" in error_str or "retry-after" in error_str:
+                import re
+                match = re.search(r'retry[-\s]after[:\s]+(\d+)', error_str)
+                if match:
+                    retry_after = float(match.group(1))
+            
+            if retry_after:
+                logger.warning(f"Rate limit exceeded. Waiting {retry_after} seconds...")
+                time.sleep(retry_after)
+            else:
+                # Default wait time for Notion rate limits (typically 1-3 seconds)
+                logger.warning("Rate limit exceeded. Waiting 3 seconds...")
+                time.sleep(3)
+            
+            raise NotionRateLimitError(f"Rate limit exceeded: {error}", retry_after=retry_after)
 
     def create_page(
         self, properties: Dict[str, Any], children: Optional[List[Dict[str, Any]]] = None
@@ -108,24 +189,41 @@ class NotionClientWrapper:
         Raises:
             NotionAPIError: If page creation fails
         """
-        try:
-            page_data = {
-                "parent": {"database_id": self.database_id},
-                "properties": properties,
-            }
+        max_retries = 5
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                page_data = {
+                    "parent": {"database_id": self.database_id},
+                    "properties": properties,
+                }
 
-            if children:
-                page_data["children"] = children
+                if children:
+                    page_data["children"] = children
 
-            # Rate limiting
-            time.sleep(self.rate_limit)
+                # Rate limiting BEFORE the request to prevent hitting limits
+                self._wait_for_rate_limit()
 
-            page = self.client.pages.create(**page_data)
-            return page
+                page = self.client.pages.create(**page_data)
+                return page
 
-        except APIResponseError as e:
-            logger.error(f"Failed to create page: {e}")
-            raise NotionAPIError(f"Failed to create page: {e}")
+            except APIResponseError as e:
+                # Check if it's a rate limit error
+                if e.code == "rate_limited" or "rate limit" in str(e).lower():
+                    self._handle_rate_limit_error(e)
+                    retry_count += 1
+                    continue
+                else:
+                    logger.error(f"Failed to create page: {e}")
+                    raise NotionAPIError(f"Failed to create page: {e}")
+            except NotionRateLimitError:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    raise NotionAPIError(f"Failed to create page after {max_retries} retries due to rate limiting")
+                continue
+        
+        raise NotionAPIError(f"Failed to create page after {max_retries} retries")
 
     def import_meetings(
         self, transformed_meetings: List[Dict[str, Any]], dry_run: bool = False
