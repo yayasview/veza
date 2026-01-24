@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meet Auto Record</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      width: 300px;
+      background: #fff;
+      color: #202124;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #4285f4, #34a853);
+      color: white;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .header p {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .content {
+      padding: 16px;
+    }
+
+    .toggle-group {
+      margin-bottom: 16px;
+    }
+
+    .toggle-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+
+    .toggle-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .toggle-label {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .toggle-label span {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .toggle-label small {
+      font-size: 11px;
+      color: #5f6368;
+      margin-top: 2px;
+    }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #dadce0;
+      transition: 0.3s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    input:checked + .slider {
+      background-color: #4285f4;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    .status {
+      background: #f1f3f4;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+    }
+
+    .status-title {
+      font-size: 12px;
+      color: #5f6368;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .status-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    .status-dot.active {
+      background: #34a853;
+    }
+
+    .status-dot.inactive {
+      background: #dadce0;
+    }
+
+    .footer {
+      padding: 12px 16px;
+      border-top: 1px solid #e8eaed;
+      text-align: center;
+      font-size: 11px;
+      color: #5f6368;
+    }
+
+    .master-toggle {
+      background: #e8f0fe;
+      border: 1px solid #4285f4;
+    }
+
+    .master-toggle.disabled {
+      background: #fce8e6;
+      border-color: #ea4335;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Google Meet Auto Record</h1>
+    <p>Automatically record your meetings</p>
+  </div>
+
+  <div class="content">
+    <div class="toggle-group">
+      <div class="toggle-item master-toggle" id="masterToggle">
+        <div class="toggle-label">
+          <span>Extension Enabled</span>
+          <small>Master switch for all features</small>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="enabledToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="toggle-group" id="featureToggles">
+      <div class="toggle-item">
+        <div class="toggle-label">
+          <span>Auto Record</span>
+          <small>Start recording when joining</small>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="autoRecordToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-item">
+        <div class="toggle-label">
+          <span>Auto Transcript</span>
+          <small>Enable captions automatically</small>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="autoTranscriptToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="status">
+      <div class="status-title">Current Meeting Status</div>
+      <div class="status-item">
+        <span class="status-dot inactive" id="recordingDot"></span>
+        <span id="recordingStatus">Recording: Inactive</span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot inactive" id="transcriptDot"></span>
+        <span id="transcriptStatus">Transcript: Inactive</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Settings are saved automatically
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
